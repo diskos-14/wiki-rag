@@ -1,0 +1,42 @@
+[project]
+name = "wiki-rag-backend"
+version = "0.1.0"
+description = "FastAPI RAG + agent backend over English Wikipedia passages"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.1",
+    "asyncpg>=0.32.0",
+    "datasets>=5.1.0",
+    "fastapi>=0.161.1",
+    "ftfy>=6.3.1",
+    "google-genai>=2.33.0",
+    "pgvector>=0.5.1",
+    "pydantic-ai-slim[google]>=2.60.0",
+    "pydantic-settings>=2.16.1",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "tenacity>=9.1.4",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.2",
+]
