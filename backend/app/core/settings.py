@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     # Database
     database_url: SecretStr
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
 
     # Google Cloud / Vertex AI (auth via Application Default Credentials, no API key)
     gcp_project: str | None = None
