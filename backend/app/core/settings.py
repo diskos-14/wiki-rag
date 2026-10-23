@@ -30,11 +30,14 @@ class Settings(BaseSettings):
     # Google Cloud / Vertex AI (auth via Application Default Credentials, no API key)
     gcp_project: str | None = None
     gcp_location: str = "asia-southeast1"
+    gcp_max_retries: int = 5  # SDK retries 408/429/5xx with exponential backoff
 
     # Embeddings
-    embedding_provider: Literal["google", "mock"] = "google"
+    embedding_provider: Literal["google"] = "google"
     embedding_model: str = "gemini-embedding-2"
     embedding_dim: int = 768
+    embedding_batch_size: int = 50  # texts per API request
+    embedding_max_concurrency: int = 8  # parallel API requests
 
     # LLM
     llm_provider: Literal["google", "mock"] = "google"

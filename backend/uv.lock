@@ -2574,7 +2574,6 @@ dependencies = [
     { name = "pydantic-ai-slim", extra = ["google"] },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "tenacity" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -2598,7 +2597,6 @@ requires-dist = [
     { name = "pydantic-ai-slim", extras = ["google"], specifier = ">=2.60.0" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.6" },
-    { name = "tenacity", specifier = ">=9.1.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
 
