@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Data (downloaded and generated)
+backend/data/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
