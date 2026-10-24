@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 
 import httpx
 import pytest
@@ -6,12 +7,14 @@ from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
+from app.conversations.schemas import Turn
 from app.core.db import get_session
 from app.knowledge.schemas import ChunkHit
 from app.main import create_app
 from app.rag.agent import AnswerDeps, build_answer_agent, format_prompt
 from app.rag.dependencies import get_rag_service
-from app.rag.service import NOT_ENOUGH_EVIDENCE, RAGService
+from app.rag.rewrite import build_rewrite_agent
+from app.rag.service import NOT_ENOUGH_EVIDENCE, ConversationNotFoundError, RAGService
 from app.retrieval.pipeline import RetrievalResult
 
 BORDER = "It is bordered by Brazil."
@@ -44,13 +47,61 @@ def never_called() -> FunctionModel:
 class FakeRetrieval:
     result: RetrievalResult
     min_similarity: float = 0.63
+    questions: list[str] = field(default_factory=list)
 
     async def retrieve(self, question: str) -> RetrievalResult:
+        self.questions.append(question)
         return self.result
 
 
-def service(result: RetrievalResult, model: FunctionModel) -> RAGService:
-    return RAGService(FakeRetrieval(result), build_answer_agent(model), strategy_name="hybrid")
+@dataclass
+class FakeConversations:
+    """In-memory stand-in for ConversationRepository."""
+
+    messages: dict[uuid.UUID, list[dict]] = field(default_factory=dict)
+
+    async def create(self) -> uuid.UUID:
+        conversation_id = uuid.uuid4()
+        self.messages[conversation_id] = []
+        return conversation_id
+
+    async def exists(self, conversation_id):
+        return conversation_id in self.messages
+
+    async def recent_turns(self, conversation_id, limit):
+        return [
+            Turn(role=m["role"], content=m["content"])
+            for m in self.messages[conversation_id][-limit:]
+        ]
+
+    async def add_message(self, conversation_id, **message):
+        self.messages[conversation_id].append(message)
+
+
+@dataclass
+class FakeUnitOfWork:
+    commits: int = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+def service(
+    result: RetrievalResult,
+    model: FunctionModel,
+    rewrite_model: FunctionModel | None = None,
+    conversations: FakeConversations | None = None,
+    unit_of_work: FakeUnitOfWork | None = None,
+) -> RAGService:
+    return RAGService(
+        FakeRetrieval(result),
+        build_answer_agent(model),
+        build_rewrite_agent(rewrite_model or never_called()),
+        conversations or FakeConversations(),
+        unit_of_work or FakeUnitOfWork(),
+        strategy_name="hybrid",
+        history_messages=6,
+    )
 
 
 ENOUGH = RetrievalResult(hits=[hit(10), hit(11)], best_similarity=0.82, enough_evidence=True)
@@ -206,3 +257,116 @@ async def test_ask_returns_504_when_the_model_times_out(client_for):
         response = await client.post("/ask", json={"question": "What borders Uruguay?"})
 
     assert response.status_code == 504
+
+
+# --- Chat history ---
+
+
+def capturing(output: dict, prompts: list[str]) -> FunctionModel:
+    """Returns `output` and records the user prompt it was given."""
+
+    def respond(messages, info):
+        prompts.append(messages[-1].parts[-1].content)
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, output)])
+
+    return FunctionModel(respond)
+
+
+async def test_first_turn_starts_a_conversation_without_a_rewrite_call():
+    conversations, uow = FakeConversations(), FakeUnitOfWork()
+    model = answering({"answer": "Brazil [1].", "citations": [1], "answerable": True})
+    rag = service(ENOUGH, model, never_called(), conversations, uow)
+
+    response = await rag.ask("What borders Uruguay?", debug=True)
+
+    assert response.standalone_question == "What borders Uruguay?"
+    assert not response.debug.rewrite_called
+    saved = conversations.messages[response.conversation_id]
+    assert [m["role"] for m in saved] == ["user", "assistant"]
+    assert saved[1]["source_chunk_ids"] == [10]
+    assert uow.commits == 1
+
+
+async def test_follow_up_is_rewritten_and_the_rewrite_is_used_for_retrieval():
+    conversations = FakeConversations()
+    first = service(
+        ENOUGH,
+        answering({"answer": "Lincoln was president [1].", "citations": [1], "answerable": True}),
+        conversations=conversations,
+    )
+    conversation_id = (await first.ask("Who was Abraham Lincoln?")).conversation_id
+
+    answer_prompts: list[str] = []
+    rewrite = answering({"question": "When was Abraham Lincoln born?"})
+    born = {"answer": "1809 [1].", "citations": [1], "answerable": True}
+    answer = capturing(born, answer_prompts)
+    follow_up = service(ENOUGH, answer, rewrite, conversations)
+
+    response = await follow_up.ask("When was he born?", conversation_id=conversation_id)
+
+    assert response.standalone_question == "When was Abraham Lincoln born?"
+    assert follow_up.retrieval.questions == ["When was Abraham Lincoln born?"]
+    assert "User: Who was Abraham Lincoln?" in answer_prompts[0]
+    saved = conversations.messages[conversation_id]
+    assert saved[2]["content"] == "When was he born?"
+    assert saved[2]["standalone_question"] == "When was Abraham Lincoln born?"
+
+
+async def test_refusals_are_saved_to_the_conversation_too():
+    conversations = FakeConversations()
+    rag = service(TOO_WEAK, never_called(), conversations=conversations)
+
+    response = await rag.ask("Capital of Mars?")
+
+    saved = conversations.messages[response.conversation_id]
+    assert saved[1] == {"role": "assistant", "content": NOT_ENOUGH_EVIDENCE, "source_chunk_ids": []}
+
+
+async def test_unknown_conversation_is_an_error():
+    with pytest.raises(ConversationNotFoundError):
+        await service(ENOUGH, never_called()).ask("Hi there?", conversation_id=uuid.uuid4())
+
+
+async def test_ask_returns_404_for_unknown_conversation(client_for):
+    make, _ = client_for
+    payload = {"question": "When was he born?", "conversation_id": str(uuid.uuid4())}
+
+    async with make(service(ENOUGH, never_called())) as client:
+        response = await client.post("/ask", json=payload)
+
+    assert response.status_code == 404
+
+
+async def test_conversation_messages_endpoint(client_for):
+    from datetime import UTC, datetime
+
+    from app.conversations.router import get_conversation_repository
+    from app.conversations.schemas import MessageOut
+
+    _, app = client_for
+    known = uuid.uuid4()
+
+    class FakeRepo:
+        async def exists(self, conversation_id):
+            return conversation_id == known
+
+        async def messages(self, conversation_id):
+            return [
+                MessageOut(
+                    role="user",
+                    content="Hi?",
+                    standalone_question="Hi?",
+                    source_chunk_ids=None,
+                    created_at=datetime.now(UTC),
+                )
+            ]
+
+    app.dependency_overrides[get_conversation_repository] = lambda: FakeRepo()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ok = await client.get(f"/conversations/{known}/messages")
+        missing = await client.get(f"/conversations/{uuid.uuid4()}/messages")
+
+    assert ok.status_code == 200
+    assert ok.json()[0]["content"] == "Hi?"
+    assert missing.status_code == 404
