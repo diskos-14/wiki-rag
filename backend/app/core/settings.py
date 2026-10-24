@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     llm_model: str = "gemini-3.8-flash"
     llm_timeout_seconds: float = 30.0
 
+    # Chat history: recent messages given to the rewrite and answer agents
+    history_messages: int = 6
+
     # Retrieval
     retrieval_strategy: Literal["hybrid", "vector"] = "hybrid"
     retrieval_dataset: str = "rag-mini-wikipedia"

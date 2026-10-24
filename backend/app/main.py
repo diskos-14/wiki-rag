@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.conversations import router as conversations
 from app.core import health
 from app.core.db import get_engine
 from app.rag import router as rag
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(rag.router)
+    app.include_router(conversations.router)
     return app
 
 

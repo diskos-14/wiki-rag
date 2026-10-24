@@ -6,7 +6,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-import app.knowledge.models  # noqa: F401  (registers tables on Base.metadata)
+import app.conversations.models  # noqa: F401  (registers tables on Base.metadata)
+import app.knowledge.models  # noqa: F401
 from app.core.db import Base
 from app.core.settings import get_settings
 

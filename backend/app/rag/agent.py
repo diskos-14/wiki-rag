@@ -8,7 +8,9 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModelSettings
 
+from app.conversations.schemas import Turn
 from app.knowledge.schemas import ChunkHit
+from app.rag.rewrite import format_history
 
 INSTRUCTIONS = """\
 You answer questions using only the numbered sources, which are passages from English Wikipedia.
@@ -64,8 +66,12 @@ def build_answer_agent(
     return agent
 
 
-def format_prompt(question: str, sources: Sequence[ChunkHit]) -> str:
+def format_prompt(question: str, sources: Sequence[ChunkHit], history: Sequence[Turn] = ()) -> str:
+    """Numbered sources, then (if any) the recent conversation for context, then the question."""
     lines = ["Sources:"]
     lines += [f"[{n}] ({hit.title}) {hit.content}" for n, hit in enumerate(sources, start=1)]
+    if history:
+        lines += ["", "Conversation so far (context only; answer from the sources):"]
+        lines += [format_history(history)]
     lines += ["", f"Question: {question}"]
     return "\n".join(lines)

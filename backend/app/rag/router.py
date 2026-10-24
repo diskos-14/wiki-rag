@@ -6,7 +6,7 @@ from pydantic_ai.exceptions import ModelAPIError, ModelTimeoutError, UnexpectedM
 
 from app.rag.dependencies import get_rag_service
 from app.rag.schemas import AskRequest, AskResponse
-from app.rag.service import RAGService
+from app.rag.service import ConversationNotFoundError, RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,11 @@ async def ask(
 ) -> AskResponse:
     """Answer a question from the knowledge base, with cited sources."""
     try:
-        return await service.ask(request.question, debug=request.debug)
+        return await service.ask(
+            request.question, conversation_id=request.conversation_id, debug=request.debug
+        )
+    except ConversationNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found.") from exc
     except ModelTimeoutError as exc:
         logger.warning("Model request timed out: %s", exc)
         raise HTTPException(
