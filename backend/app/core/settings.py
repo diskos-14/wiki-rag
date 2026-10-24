@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # LLM
     llm_provider: Literal["google", "mock"] = "google"
     llm_model: str = "gemini-3.8-flash"
+    llm_timeout_seconds: float = 30.0
 
     # Retrieval
     retrieval_strategy: Literal["hybrid", "vector"] = "hybrid"
