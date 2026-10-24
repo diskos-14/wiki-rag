@@ -102,11 +102,11 @@ class FakeChunkRepository:
     by_keyword: list[ChunkHit]
     calls: list[tuple] = field(default_factory=list)
 
-    async def search_by_vector(self, embedding, k, *, dataset=None):
+    async def search_by_vector(self, embedding, k, *, dataset=None, title=None, topic=None):
         self.calls.append(("vector", k, dataset))
         return self.by_vector[:k]
 
-    async def search_by_keyword(self, query, k, *, dataset=None):
+    async def search_by_keyword(self, query, k, *, dataset=None, title=None, topic=None):
         self.calls.append(("keyword", query, k, dataset))
         return self.by_keyword[:k]
 

@@ -22,8 +22,16 @@ class RetrievedChunks:
 
 class Retriever(Protocol):
     async def retrieve(
-        self, query_vector: Sequence[float], query_text: str, k: int
-    ) -> RetrievedChunks: ...
+        self,
+        query_vector: Sequence[float],
+        query_text: str,
+        k: int,
+        *,
+        title: str | None = None,
+        topic: str | None = None,
+    ) -> RetrievedChunks:
+        """`title`/`topic` (semantic layer) limit the search to one article or one topic."""
+        ...
 
 
 class VectorRetriever:
@@ -34,9 +42,17 @@ class VectorRetriever:
         self.dataset = dataset
 
     async def retrieve(
-        self, query_vector: Sequence[float], query_text: str, k: int
+        self,
+        query_vector: Sequence[float],
+        query_text: str,
+        k: int,
+        *,
+        title: str | None = None,
+        topic: str | None = None,
     ) -> RetrievedChunks:
-        hits = await self.chunks.search_by_vector(query_vector, k, dataset=self.dataset)
+        hits = await self.chunks.search_by_vector(
+            query_vector, k, dataset=self.dataset, title=title, topic=topic
+        )
         return RetrievedChunks(hits, best_similarity=max((h.score for h in hits), default=0.0))
 
 
@@ -61,14 +77,17 @@ class HybridRetriever:
         self.rrf_k = rrf_k
 
     async def retrieve(
-        self, query_vector: Sequence[float], query_text: str, k: int
+        self,
+        query_vector: Sequence[float],
+        query_text: str,
+        k: int,
+        *,
+        title: str | None = None,
+        topic: str | None = None,
     ) -> RetrievedChunks:
-        by_vector = await self.chunks.search_by_vector(
-            query_vector, self.candidates, dataset=self.dataset
-        )
-        by_keyword = await self.chunks.search_by_keyword(
-            query_text, self.candidates, dataset=self.dataset
-        )
+        filters = {"dataset": self.dataset, "title": title, "topic": topic}
+        by_vector = await self.chunks.search_by_vector(query_vector, self.candidates, **filters)
+        by_keyword = await self.chunks.search_by_keyword(query_text, self.candidates, **filters)
         fused = reciprocal_rank_fusion([by_vector, by_keyword], k=self.rrf_k)[:k]
         best = max((h.score for h in by_vector), default=0.0)
         return RetrievedChunks(fused, best_similarity=best)

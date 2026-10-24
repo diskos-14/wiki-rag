@@ -26,6 +26,14 @@ class ChunkText:
 
 
 @dataclass(frozen=True)
+class ArticleSummary:
+    title: str
+    topic: str | None
+    summary: str | None
+    entities: list[tuple[str, str, int]]  # (name, type, chunks mentioning it)
+
+
+@dataclass(frozen=True)
 class EntityMention:
     """An entity and the articles that mention it, most mentions first."""
 
@@ -87,6 +95,38 @@ class SemanticRepository:
         linked = select(ChunkEntity.entity_id)
         result = await self.session.execute(delete(Entity).where(Entity.id.not_in(linked)))
         return result.rowcount
+
+    async def article_profile(
+        self, title: str, *, dataset: str, top_entities: int = 12
+    ) -> ArticleSummary | None:
+        """Topic, summary and most-mentioned entities of one article (title case-insensitive)."""
+        doc = (
+            await self.session.execute(
+                select(Document.id, Document.title, Document.topic, Document.summary).where(
+                    Document.dataset == dataset,
+                    func.lower(Document.title) == title.strip().lower(),
+                )
+            )
+        ).first()
+        if doc is None:
+            return None
+        entities = (
+            await self.session.execute(
+                select(Entity.name, Entity.type, func.count(Chunk.id).label("n"))
+                .join(ChunkEntity, ChunkEntity.entity_id == Entity.id)
+                .join(Chunk, Chunk.id == ChunkEntity.chunk_id)
+                .where(Chunk.document_id == doc.id)
+                .group_by(Entity.id)
+                .order_by(func.count(Chunk.id).desc(), Entity.name)
+                .limit(top_entities)
+            )
+        ).all()
+        return ArticleSummary(
+            title=doc.title,
+            topic=doc.topic,
+            summary=doc.summary,
+            entities=[(e.name, e.type, e.n) for e in entities],
+        )
 
     async def find_entity(self, name: str, *, dataset: str | None = None) -> list[EntityMention]:
         """Entities whose name or alias equals `name` (case-insensitive), with their articles.
