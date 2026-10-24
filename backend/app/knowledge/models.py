@@ -61,7 +61,7 @@ class Chunk(Base):
     document_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("documents.id", ondelete="CASCADE")
     )
-    # Position in the article, used for neighbor expansion.
+    # Position in the article (keeps reading order).
     chunk_index: Mapped[int] = mapped_column(Integer)
     # Original dataset passage id(s); several when short passages were merged.
     source_ids: Mapped[list[str]] = mapped_column(ARRAY(Text))

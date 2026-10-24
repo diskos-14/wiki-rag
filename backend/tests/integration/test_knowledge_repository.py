@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import select
 
 from app.knowledge.models import EMBEDDING_DIM, Chunk
@@ -79,3 +80,55 @@ async def test_search_by_keyword_matches_the_title_header(session):
 
     # "Zyxlandia" is only in the contextual header, not the passage text.
     assert [h.document_id for h in hits] == [doc_id]
+
+
+async def test_vector_search_with_dataset_filter_still_returns_k_rows(session):
+    # The query is unrelated to everything, so the nearest neighbours are all real ingested
+    # chunks from another dataset. Without iterative scan, HNSW would find those, filter them
+    # out, and return nothing; with it, the search keeps going until our 3 rows are found.
+    documents = DocumentRepository(session)
+    chunks = ChunkRepository(session)
+    doc_id = await documents.upsert(dataset=DATASET, title="Zyxlandia", content="...")
+    await chunks.replace_for_document(
+        doc_id, [chunk(i, f"passage {i}", "Zyxlandia", one_hot(10 + i)) for i in range(3)]
+    )
+
+    hits = await chunks.search_by_vector(one_hot(500), k=3, dataset=DATASET)
+
+    assert len(hits) == 3
+    assert {h.document_id for h in hits} == {doc_id}
+
+
+async def test_keyword_search_with_dataset_filter_ignores_other_datasets(session):
+    documents = DocumentRepository(session)
+    chunks = ChunkRepository(session)
+    doc_id = await documents.upsert(dataset=DATASET, title="Uruguay", content="...")
+    await chunks.replace_for_document(
+        doc_id, [chunk(0, "It is bordered by Brazil.", "Uruguay", one_hot(0))]
+    )
+
+    hits = await chunks.search_by_keyword("Uruguay borders", k=5, dataset=DATASET)
+
+    assert [h.document_id for h in hits] == [doc_id]
+
+
+async def test_hybrid_retriever_end_to_end_within_a_dataset(session):
+    from app.retrieval.retrievers import HybridRetriever
+
+    documents = DocumentRepository(session)
+    chunks = ChunkRepository(session)
+    doc_id = await documents.upsert(dataset=DATASET, title="Zyxlandia", content="...")
+    await chunks.replace_for_document(
+        doc_id,
+        [
+            chunk(0, "The capital is Qorvath.", "Zyxlandia", one_hot(0)),
+            chunk(1, "It is bordered by Brazil.", "Zyxlandia", one_hot(1)),
+        ],
+    )
+    retriever = HybridRetriever(chunks, dataset=DATASET, candidates=5)
+
+    found = await retriever.retrieve(one_hot(1), "Zyxlandia borders", k=2)
+
+    # Chunk 1 is top of both searches, so it ranks first; similarity comes from the vector side.
+    assert found.hits[0].content == "It is bordered by Brazil."
+    assert found.best_similarity == pytest.approx(1.0)

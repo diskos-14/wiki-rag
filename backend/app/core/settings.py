@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     llm_provider: Literal["google", "mock"] = "google"
     llm_model: str = "gemini-3.8-flash"
 
+    # Retrieval
+    retrieval_strategy: Literal["hybrid", "vector"] = "hybrid"
+    retrieval_dataset: str = "rag-mini-wikipedia"
+    retrieval_top_k: int = 5  # chunks given to the LLM
+    retrieval_candidates: int = 20  # per search, before fusion
+    rrf_k: int = 60
+    min_similarity: float = 0.63
+
 
 @lru_cache
 def get_settings() -> Settings:
