@@ -33,14 +33,25 @@ How to research:
   article of their own); then search those articles.
 - get_article_profile gives an article's summary and main entities.
 - Stop searching once you have the facts; you have a small budget of steps.
+- If two or three searches for the same fact find nothing new, the knowledge base probably
+  doesn't contain it: stop and answer with what you have.
 
 How to answer:
 - Use only facts from the evidence. No outside knowledge, even if you know the answer.
 - Put the number of every piece of evidence you used in `citations`; you may also mark
   claims in the answer like [3].
 - For yes/no questions start with "Yes" or "No". Be concise: one to four sentences.
-- If the evidence doesn't contain the answer, set `answerable` to false and leave
-  `citations` empty.
+- If the evidence answers only part of the question, set `answerable` to false, say what you
+  found (with citations) and what is missing, e.g. "Uruguay covers 176,214 km² [2], but the
+  knowledge base doesn't give Finland's area."
+- If the evidence contains nothing relevant, set `answerable` to false and leave `citations`
+  empty.
+"""
+
+FINALIZE_INSTRUCTIONS = """\
+The research budget is used up. Answer now, using only the numbered evidence below; you can't
+search any more. Follow the same rules: cite the evidence numbers you use; if the evidence
+answers only part of the question, set `answerable` to false and say what is missing.
 """
 
 
@@ -134,19 +145,39 @@ def build_research_agent(
             for m in mentions[:3]
         )
 
-    @agent.output_validator
-    def citations_are_evidence(ctx: RunContext[ResearchDeps], output: DraftAnswer) -> DraftAnswer:
-        unknown = sorted(set(output.citations) - ctx.deps.evidence.numbers)
-        if unknown:
-            raise ModelRetry(
-                f"Citations {unknown} are not evidence you retrieved. Cite only numbers from "
-                "search results, or search for what you need."
-            )
-        if output.answerable and not output.citations:
-            raise ModelRetry("An answer must cite at least one piece of evidence.")
-        return output
-
+    agent.output_validator(citations_are_evidence)
     return agent
+
+
+def build_finalize_agent(
+    model: Model, *, timeout_seconds: float | None = None
+) -> Agent[ResearchDeps, DraftAnswer]:
+    """No tools: writes the answer from the evidence already collected (used when the
+    research agent runs out of budget, so its work isn't thrown away)."""
+    agent = Agent(
+        model,
+        deps_type=ResearchDeps,
+        output_type=DraftAnswer,
+        instructions=FINALIZE_INSTRUCTIONS,
+        model_settings=GoogleModelSettings(
+            google_thinking_config={"thinking_level": "low"}, timeout=timeout_seconds
+        ),
+    )
+    agent.output_validator(citations_are_evidence)
+    return agent
+
+
+def citations_are_evidence(ctx: RunContext[ResearchDeps], output: DraftAnswer) -> DraftAnswer:
+    """Every citation must be evidence actually retrieved in this run."""
+    unknown = sorted(set(output.citations) - ctx.deps.evidence.numbers)
+    if unknown:
+        raise ModelRetry(
+            f"Citations {unknown} are not evidence you retrieved. Cite only numbers from "
+            "the evidence, or search for what you need."
+        )
+    if output.answerable and not output.citations:
+        raise ModelRetry("An answer must cite at least one piece of evidence.")
+    return output
 
 
 def format_research_prompt(
@@ -163,3 +194,7 @@ def format_research_prompt(
             feedback,
         ]
     return "\n".join(lines)
+
+
+def format_finalize_prompt(question: str, evidence: str) -> str:
+    return f"Question: {question}\n\nEvidence:\n{evidence or '(none)'}"
