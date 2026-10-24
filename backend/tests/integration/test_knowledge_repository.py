@@ -1,4 +1,6 @@
-from app.knowledge.models import EMBEDDING_DIM
+from sqlalchemy import select
+
+from app.knowledge.models import EMBEDDING_DIM, Chunk
 from app.knowledge.repository import ChunkRepository, DocumentRepository
 from app.knowledge.schemas import ChunkCreate
 
@@ -41,8 +43,8 @@ async def test_replace_for_document_removes_stale_chunks(session):
     )
     await chunks.replace_for_document(doc_id, [chunk(0, "a", "Uruguay", one_hot(0))])
 
-    hits = await chunks.search_by_vector(one_hot(1), k=10)
-    assert [h.chunk_index for h in hits if h.document_id == doc_id] == [0]
+    stored = await session.scalars(select(Chunk.chunk_index).where(Chunk.document_id == doc_id))
+    assert list(stored) == [0]
 
 
 async def test_search_by_vector_ranks_closest_first(session):
@@ -67,12 +69,13 @@ async def test_search_by_vector_ranks_closest_first(session):
 async def test_search_by_keyword_matches_the_title_header(session):
     documents = DocumentRepository(session)
     chunks = ChunkRepository(session)
-    doc_id = await documents.upsert(dataset=DATASET, title="Uruguay", content="...")
+    # A made-up title, so real ingested data can't outrank the test row.
+    doc_id = await documents.upsert(dataset=DATASET, title="Zyxlandia", content="...")
     await chunks.replace_for_document(
-        doc_id, [chunk(0, "It is bordered by Brazil.", "Uruguay", one_hot(0))]
+        doc_id, [chunk(0, "It is bordered by Brazil.", "Zyxlandia", one_hot(0))]
     )
 
-    hits = await chunks.search_by_keyword("Uruguay borders", k=5)
+    hits = await chunks.search_by_keyword("Zyxlandia borders", k=5)
 
-    # "Uruguay" is only in the contextual header, not the passage text.
-    assert any(h.document_id == doc_id for h in hits)
+    # "Zyxlandia" is only in the contextual header, not the passage text.
+    assert [h.document_id for h in hits] == [doc_id]

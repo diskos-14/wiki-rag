@@ -27,6 +27,11 @@ class DocumentRepository:
         ).returning(Document.id)
         return (await self.session.execute(stmt)).scalar_one()
 
+    async def delete_dataset(self, dataset: str) -> int:
+        """Delete every document (and, by cascade, chunk) of a dataset. Returns the count."""
+        result = await self.session.execute(delete(Document).where(Document.dataset == dataset))
+        return result.rowcount
+
     async def count(self) -> int:
         return (await self.session.execute(select(func.count(Document.id)))).scalar_one()
 
