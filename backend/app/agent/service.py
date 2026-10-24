@@ -18,6 +18,7 @@ from app.rag.service import UnitOfWork
 from app.retrieval.retrievers import Retriever
 from app.semantic.catalog import format_catalog
 from app.semantic.repository import SemanticRepository
+from app.semantic.scope import scope_guard_for
 
 SNIPPET_CHARS = 300
 
@@ -91,6 +92,7 @@ class AgentService:
                 catalog=catalog,
             ),
             research_request_limit=self.research_request_limit,
+            scope_guard=scope_guard_for(tuple(await self.semantic.scope_names(self.dataset))),
         )
         run = await run_agent(self.bundle.graph, context, question, history)
 

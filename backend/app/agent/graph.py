@@ -21,6 +21,7 @@ from app.agent.research import (
 )
 from app.agent.understand import QueryUnderstanding, UnderstandDeps, format_understand_prompt
 from app.conversations.schemas import Turn
+from app.semantic.scope import ScopeGuard
 
 NOT_ENOUGH_EVIDENCE = "I couldn't find information about that in the knowledge base."
 OUT_OF_SCOPE = "That question isn't covered by the knowledge base, so I can't answer it."
@@ -62,6 +63,9 @@ class AgentContext:
     grounding_agent: Agent[None, GroundingReport]
     research_deps: ResearchDeps  # holds the evidence collected during this run
     research_request_limit: int = 5
+    # Overrules an "out_of_scope" verdict when the question names something in the knowledge
+    # base (see app/semantic/scope.py). None disables the check.
+    scope_guard: ScopeGuard | None = None
     max_grounding_retries: int = 1
 
 
@@ -88,6 +92,16 @@ async def understand(state: AgentState, runtime: Runtime[AgentContext]) -> Agent
     )
     u = result.output
     summary = f"intent={u.intent}; question={u.standalone_question!r}"
+    if u.intent == "out_of_scope" and ctx.scope_guard is not None:
+        names = ctx.scope_guard.mentioned(f"{state['question']} {u.standalone_question}")
+        if names:
+            # The model said "out of scope", but the question names something we have:
+            # search instead of refusing (the research step will refuse if nothing is found).
+            u = u.model_copy(update={"intent": "fact_lookup"})
+            summary = (
+                f"intent=out_of_scope overruled by the scope guard (names {names[:3]}) "
+                f"→ fact_lookup; question={u.standalone_question!r}"
+            )
     if u.sub_questions:
         summary += f"; sub-questions={u.sub_questions}"
     return {

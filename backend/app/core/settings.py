@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # LLM
     llm_provider: Literal["google", "mock"] = "google"
     llm_model: str = "gemini-3.8-flash"
+    # Optional faster model for the high-volume steps (understand, research, finalize, the
+    # /ask rewrite and answer). Grounding always uses llm_model: it's the safety net, and in
+    # tests flash-lite passed an answer with an invented detail that llm_model caught.
+    llm_fast_model: str | None = None
     llm_timeout_seconds: float = 30.0
 
     # Chat history: recent messages given to the rewrite and answer agents

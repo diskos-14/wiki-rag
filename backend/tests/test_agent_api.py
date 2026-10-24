@@ -35,6 +35,9 @@ class FakeCatalogSemantic(FakeSemantic):
     async def catalog_entries(self, dataset):
         return [("Abraham Lincoln", "us_president")]
 
+    async def scope_names(self, dataset):
+        return ["Abraham Lincoln", "Lincoln"]
+
 
 def service(
     understand: FunctionModel,
@@ -109,7 +112,8 @@ async def test_refusals_are_saved_too():
 
 async def test_follow_up_sends_history_to_understand():
     conversations = FakeConversations()
-    first = await service(replying(OFF_TOPIC), conversations=conversations).ask("Who was Lincoln?")
+    # A name that isn't in the knowledge base, so the scope guard lets the refusal stand.
+    first = await service(replying(OFF_TOPIC), conversations=conversations).ask("Who was Zorblax?")
 
     prompts: list[str] = []
 
@@ -121,7 +125,7 @@ async def test_follow_up_sends_history_to_understand():
         "When was he born?", conversation_id=first.conversation_id
     )
 
-    assert "User: Who was Lincoln?" in prompts[0]
+    assert "User: Who was Zorblax?" in prompts[0]
 
 
 # --- API ---

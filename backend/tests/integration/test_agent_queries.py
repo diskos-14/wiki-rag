@@ -52,3 +52,13 @@ async def test_article_profile_of_unknown_title_is_none(sessionmaker, session, t
     repo = await enriched(sessionmaker, session, tmp_path)
 
     assert await repo.article_profile("Atlantis", dataset=DATASET) is None
+
+
+async def test_scope_names_are_titles_entity_names_and_aliases(sessionmaker, session, tmp_path):
+    repo = await enriched(sessionmaker, session, tmp_path)
+
+    names = await repo.scope_names(DATASET)
+
+    assert {"Zyxlandia", "Qorvath Melendi", "Zyxland Rail Company"} <= set(names)
+    assert {"Melendi", "Qorvath"} <= set(names)  # aliases (merged from both articles)
+    assert names == sorted(set(names))

@@ -28,14 +28,16 @@ def get_embeddings() -> EmbeddingProvider:
 @lru_cache
 def get_answer_agent() -> Agent[AnswerDeps, AnswerWithCitations]:
     settings = get_settings()
-    return build_answer_agent(get_llm_model(settings), timeout_seconds=settings.llm_timeout_seconds)
+    return build_answer_agent(
+        get_llm_model(settings, fast=True), timeout_seconds=settings.llm_timeout_seconds
+    )
 
 
 @lru_cache
 def get_rewrite_agent() -> Agent[None, StandaloneQuestion]:
     settings = get_settings()
     return build_rewrite_agent(
-        get_llm_model(settings), timeout_seconds=settings.llm_timeout_seconds
+        get_llm_model(settings, fast=True), timeout_seconds=settings.llm_timeout_seconds
     )
 
 

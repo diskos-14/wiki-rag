@@ -64,6 +64,23 @@ class SemanticRepository:
         )
         return [(r.title, r.topic) for r in (await self.session.execute(stmt)).all()]
 
+    async def scope_names(self, dataset: str) -> list[str]:
+        """Every article title, and every entity name and alias mentioned in the dataset."""
+        titles = select(Document.title).where(Document.dataset == dataset)
+        entities = (
+            select(Entity.name, Entity.aliases)
+            .join(ChunkEntity, ChunkEntity.entity_id == Entity.id)
+            .join(Chunk, Chunk.id == ChunkEntity.chunk_id)
+            .join(Document, Document.id == Chunk.document_id)
+            .where(Document.dataset == dataset)
+            .distinct()
+        )
+        names = list((await self.session.scalars(titles)).all())
+        for row in (await self.session.execute(entities)).all():
+            names.append(row.name)
+            names.extend(row.aliases)
+        return sorted(set(names))
+
     async def chunks(self, dataset: str) -> list[ChunkText]:
         stmt = (
             select(Chunk.id, Chunk.content)

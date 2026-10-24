@@ -26,13 +26,17 @@ from app.semantic.repository import SemanticRepository
 @lru_cache
 def get_agent_bundle() -> AgentBundle:
     settings = get_settings()
-    model, timeout = get_llm_model(settings), settings.llm_timeout_seconds
+    timeout = settings.llm_timeout_seconds
+    fast = get_llm_model(settings, fast=True)  # LLM_FAST_MODEL, or LLM_MODEL if unset
+    careful = get_llm_model(settings)  # LLM_MODEL
     return AgentBundle(
         graph=build_agent_graph(),
-        understand=build_understand_agent(model, timeout_seconds=timeout),
-        research=build_research_agent(model, timeout_seconds=timeout),
-        finalize=build_finalize_agent(model, timeout_seconds=timeout),
-        grounding=build_grounding_agent(model, timeout_seconds=timeout),
+        understand=build_understand_agent(fast, timeout_seconds=timeout),
+        research=build_research_agent(fast, timeout_seconds=timeout),
+        finalize=build_finalize_agent(fast, timeout_seconds=timeout),
+        # The safety net stays on the stronger model: in tests flash-lite passed an answer
+        # with an invented detail ("born in Kentucky") that LLM_MODEL caught.
+        grounding=build_grounding_agent(careful, timeout_seconds=timeout),
     )
 
 
