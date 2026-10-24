@@ -52,15 +52,21 @@ class ChunkRepository:
         return len(chunks)
 
     async def search_by_vector(
-        self, embedding: Sequence[float], k: int, *, dataset: str | None = None
+        self,
+        embedding: Sequence[float],
+        k: int,
+        *,
+        dataset: str | None = None,
+        title: str | None = None,
+        topic: str | None = None,
     ) -> list[ChunkHit]:
         """Nearest chunks by cosine distance (HNSW index). Score = cosine similarity.
 
-        With a dataset filter, HNSW alone would scan a fixed number of neighbours and then drop
-        the ones from other datasets, often returning fewer than k rows. pgvector's iterative
-        scan keeps searching until k rows pass the filter (strict order keeps exact ranking).
+        With a filter (dataset, article title or topic), HNSW alone would scan a fixed number of
+        neighbours and then drop the ones that don't match, often returning fewer than k rows.
+        pgvector's iterative scan keeps searching until k rows pass (strict order keeps ranking).
         """
-        if dataset is not None:
+        if dataset is not None or title is not None or topic is not None:
             await self.session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
         distance = Chunk.embedding.cosine_distance(list(embedding))
         stmt = (
@@ -76,10 +82,16 @@ class ChunkRepository:
             .order_by(distance)
             .limit(k)
         )
-        return await self._hits(_in_dataset(stmt, dataset))
+        return await self._hits(_filtered(stmt, dataset, title, topic))
 
     async def search_by_keyword(
-        self, query: str, k: int, *, dataset: str | None = None
+        self,
+        query: str,
+        k: int,
+        *,
+        dataset: str | None = None,
+        title: str | None = None,
+        topic: str | None = None,
     ) -> list[ChunkHit]:
         """Full-text search (GIN index), ranked by ts_rank_cd."""
         tsquery = func.websearch_to_tsquery("english", query)
@@ -98,7 +110,7 @@ class ChunkRepository:
             .order_by(rank.desc())
             .limit(k)
         )
-        return await self._hits(_in_dataset(stmt, dataset))
+        return await self._hits(_filtered(stmt, dataset, title, topic))
 
     async def count(self) -> int:
         return (await self.session.execute(select(func.count(Chunk.id)))).scalar_one()
@@ -118,5 +130,11 @@ class ChunkRepository:
         ]
 
 
-def _in_dataset(stmt: Select, dataset: str | None) -> Select:
-    return stmt if dataset is None else stmt.where(Document.dataset == dataset)
+def _filtered(stmt: Select, dataset: str | None, title: str | None, topic: str | None) -> Select:
+    if dataset is not None:
+        stmt = stmt.where(Document.dataset == dataset)
+    if title is not None:
+        stmt = stmt.where(func.lower(Document.title) == title.strip().lower())
+    if topic is not None:
+        stmt = stmt.where(Document.topic == topic)
+    return stmt

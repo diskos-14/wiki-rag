@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.conversations.models  # noqa: F401  (registers tables on Base.metadata)
 import app.knowledge.models  # noqa: F401
+import app.semantic.models  # noqa: F401
 from app.core.db import Base
 from app.core.settings import get_settings
 

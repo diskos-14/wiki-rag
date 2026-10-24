@@ -31,6 +31,9 @@ class Document(Base):
     dataset: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)
+    # Semantic layer (scripts/enrich.py); empty until enrichment runs.
+    topic: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     chunks: Mapped[list["Chunk"]] = relationship(

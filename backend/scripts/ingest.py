@@ -18,7 +18,8 @@ from app.ingestion.chunkers import get_chunker
 from app.ingestion.pipeline import ingest, load_passages
 from app.llm.factory import get_llm_model
 
-TITLE_CACHE = BACKEND_DIR / "data" / "articles.jsonl"
+# Committed seed: passage id → article title, so a fresh ingest needs no Gemini titling.
+TITLE_CACHE = BACKEND_DIR / "seed" / "article_titles.jsonl"
 
 
 def parse_args() -> argparse.Namespace:
