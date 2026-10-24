@@ -2,9 +2,19 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from app.core.settings import Settings
 from app.knowledge.schemas import ChunkHit
-from app.retrieval.pipeline import RetrievalPipeline
-from app.retrieval.retrievers import RetrievedChunks, reciprocal_rank_fusion
+from app.retrieval.pipeline import (
+    RetrievalPipeline,
+    build_retrieval_pipeline,
+    build_retriever,
+)
+from app.retrieval.retrievers import (
+    HybridRetriever,
+    RetrievedChunks,
+    VectorRetriever,
+    reciprocal_rank_fusion,
+)
 
 
 def hit(chunk_id: int, score: float = 0.0) -> ChunkHit:
@@ -81,3 +91,62 @@ async def test_pipeline_applies_the_evidence_threshold(best_similarity, hits, ex
     assert result.enough_evidence is expected
     assert result.best_similarity == best_similarity
     assert retriever.calls == [("What borders Uruguay?", 5)]
+
+
+# --- Retrievers (with a fake repository) ---
+
+
+@dataclass
+class FakeChunkRepository:
+    by_vector: list[ChunkHit]
+    by_keyword: list[ChunkHit]
+    calls: list[tuple] = field(default_factory=list)
+
+    async def search_by_vector(self, embedding, k, *, dataset=None):
+        self.calls.append(("vector", k, dataset))
+        return self.by_vector[:k]
+
+    async def search_by_keyword(self, query, k, *, dataset=None):
+        self.calls.append(("keyword", query, k, dataset))
+        return self.by_keyword[:k]
+
+
+async def test_vector_retriever_reports_best_similarity():
+    repo = FakeChunkRepository([hit(1, 0.8), hit(2, 0.7)], [])
+
+    found = await VectorRetriever(repo, dataset="d").retrieve([0.1], "q", k=2)
+
+    assert [h.chunk_id for h in found.hits] == [1, 2]
+    assert found.best_similarity == 0.8
+    assert repo.calls == [("vector", 2, "d")]
+
+
+async def test_vector_retriever_with_no_hits_has_zero_similarity():
+    found = await VectorRetriever(FakeChunkRepository([], [])).retrieve([0.1], "q", k=5)
+    assert found == RetrievedChunks([], 0.0)
+
+
+async def test_hybrid_retriever_fuses_and_takes_similarity_from_the_vector_side():
+    repo = FakeChunkRepository(by_vector=[hit(1, 0.7), hit(2, 0.6)], by_keyword=[hit(2, 9.0)])
+
+    found = await HybridRetriever(repo, dataset="d", candidates=20).retrieve([0.1], "q", k=1)
+
+    assert [h.chunk_id for h in found.hits] == [2]  # found by both searches
+    assert found.best_similarity == 0.7  # never the keyword rank score
+    assert repo.calls == [("vector", 20, "d"), ("keyword", "q", 20, "d")]
+
+
+@pytest.mark.parametrize(
+    ("strategy", "cls"), [("vector", "VectorRetriever"), ("hybrid", "HybridRetriever")]
+)
+def test_build_retriever_picks_the_strategy_from_settings(strategy, cls):
+    settings = Settings(
+        _env_file=None, database_url="postgresql+asyncpg://u:p@h/db", retrieval_strategy=strategy
+    )
+
+    retriever = build_retriever(settings, FakeChunkRepository([], []))
+    pipeline = build_retrieval_pipeline(settings, FakeEmbeddings(), FakeChunkRepository([], []))
+
+    assert type(retriever).__name__ == cls
+    assert retriever.dataset == settings.retrieval_dataset
+    assert (pipeline.top_k, pipeline.min_similarity) == (5, settings.min_similarity)

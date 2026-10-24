@@ -370,3 +370,53 @@ async def test_conversation_messages_endpoint(client_for):
     assert ok.status_code == 200
     assert ok.json()[0]["content"] == "Hi?"
     assert missing.status_code == 404
+
+
+# --- Remaining edge cases ---
+
+
+def test_prompts_include_history_as_context():
+    from app.rag.rewrite import format_rewrite_prompt
+
+    history = [Turn(role="user", content="Who was Lincoln?"), Turn(role="assistant", content="A.")]
+
+    answer_prompt = format_prompt("When was Lincoln born?", [hit(1)], history)
+    rewrite_prompt = format_rewrite_prompt("When was he born?", history)
+
+    assert "Conversation so far" in answer_prompt
+    assert "User: Who was Lincoln?\nAssistant: A." in answer_prompt
+    assert rewrite_prompt.endswith("Last question: When was he born?")
+    assert "Conversation so far" not in format_prompt("q", [hit(1)])  # no history, no section
+
+
+async def test_rewrite_agent_retries_an_empty_question():
+    model = answering({"question": "  "}, {"question": "When was Lincoln born?"})
+
+    result = await build_rewrite_agent(model).run("Last question: When was he born?")
+
+    assert result.output.question == "When was Lincoln born?"
+
+
+async def test_long_sources_are_shortened_to_snippets():
+    long_hit = hit(10, content="word " * 200)
+    result = RetrievalResult(hits=[long_hit], best_similarity=0.8, enough_evidence=True)
+    model = answering({"answer": "Yes [1].", "citations": [1], "answerable": True})
+
+    response = await service(result, model).ask("Is it long?")
+
+    assert len(response.sources[0].snippet) == 301  # 300 characters + "…"
+    assert response.sources[0].snippet.endswith("…")
+
+
+async def test_ask_returns_502_when_the_model_never_gives_a_valid_answer(client_for):
+    make, _ = client_for
+    # Always cites a source that doesn't exist, so the validator retries until it gives up.
+    bad = {"answer": "x [9].", "citations": [9], "answerable": True}
+
+    def always_bad(messages, info):
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, bad)])
+
+    async with make(service(ENOUGH, FunctionModel(always_bad))) as client:
+        response = await client.post("/ask", json={"question": "What borders Uruguay?"})
+
+    assert response.status_code == 502

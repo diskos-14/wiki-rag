@@ -198,3 +198,21 @@ def test_merge_section_runs_leaves_long_runs_alone():
     passages = [Passage(i, str(i)) for i in range(len(labels))]
 
     assert merge_section_runs(passages, dict(enumerate(labels))) == dict(enumerate(labels))
+
+
+def test_article_of_only_short_passages_becomes_one_chunk():
+    chunks = PassageChunker().chunk(article("Caption one.", "Caption two."))
+    assert [c.source_ids for c in chunks] == [["0", "1"]]
+
+
+def test_get_chunker_by_name():
+    from app.ingestion.chunkers import get_chunker
+
+    assert isinstance(get_chunker("passage"), PassageChunker)
+    assert isinstance(get_chunker("fixed"), FixedSizeChunker)
+    with pytest.raises(ValueError, match="unknown chunker"):
+        get_chunker("semantic")
+
+
+def test_article_content_joins_passages():
+    assert article("a", "b").content == "a\n\nb"
