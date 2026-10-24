@@ -55,6 +55,15 @@ class SemanticRepository:
         rows = (await self.session.execute(stmt)).all()
         return [ArticleRow(r.id, r.title, r.content, r.topic) for r in rows]
 
+    async def catalog_entries(self, dataset: str) -> list[tuple[str, str | None]]:
+        """(title, topic) of every article: just what the catalog needs, no article text."""
+        stmt = (
+            select(Document.title, Document.topic)
+            .where(Document.dataset == dataset)
+            .order_by(Document.title)
+        )
+        return [(r.title, r.topic) for r in (await self.session.execute(stmt)).all()]
+
     async def chunks(self, dataset: str) -> list[ChunkText]:
         stmt = (
             select(Chunk.id, Chunk.content)

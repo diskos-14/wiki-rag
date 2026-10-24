@@ -4,6 +4,7 @@ from typing import Protocol
 
 from pydantic_ai import Agent
 
+from app.conversations.errors import ConversationNotFoundError
 from app.conversations.repository import ConversationRepository
 from app.knowledge.schemas import ChunkHit
 from app.rag.agent import AnswerDeps, AnswerWithCitations, format_prompt
@@ -13,10 +14,6 @@ from app.retrieval.pipeline import RetrievalPipeline
 
 NOT_ENOUGH_EVIDENCE = "I couldn't find information about that in the knowledge base."
 SNIPPET_CHARS = 300
-
-
-class ConversationNotFoundError(LookupError):
-    pass
 
 
 class UnitOfWork(Protocol):

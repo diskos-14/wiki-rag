@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.agent import router as agent
 from app.conversations import router as conversations
 from app.core import health
 from app.core.db import get_engine
+from app.core.errors import register_error_handlers
 from app.rag import router as rag
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -27,8 +29,10 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(rag.router)
+    app.include_router(agent.router)
     app.include_router(conversations.router)
     return app
 
