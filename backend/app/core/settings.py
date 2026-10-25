@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # API access: clients send it as the X-API-Key header. Empty or unset = no auth
+    # (local development only; the deployment always sets it from Secret Manager).
+    api_key: SecretStr | None = None
+
     # Database
     database_url: SecretStr
     db_pool_size: int = 5

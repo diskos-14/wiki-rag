@@ -41,5 +41,23 @@ services:
       retries: 6
     restart: unless-stopped
 
+  frontend:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # The API inside the compose network; the same key the backend checks.
+      API_BASE_URL: http://backend:8080
+      API_KEY: ${API_KEY:-}
+    ports:
+      - "${FRONTEND_PORT:-8501}:8501"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+    restart: unless-stopped
+
 volumes:
   pgdata:

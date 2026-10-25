@@ -2,11 +2,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.core.security import require_api_key
 from app.rag.dependencies import get_rag_service
 from app.rag.schemas import AskRequest, AskResponse
 from app.rag.service import RAGService
 
-router = APIRouter(tags=["rag"])
+router = APIRouter(tags=["rag"], dependencies=[Depends(require_api_key)])
 
 
 @router.post("/ask", response_model=AskResponse)

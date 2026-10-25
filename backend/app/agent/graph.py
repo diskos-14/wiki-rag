@@ -78,7 +78,7 @@ async def input_guard(state: AgentState, runtime: Runtime[AgentContext]) -> Agen
         "guard_decisions": {"input": "pass"},
         "retries": 0,
         "max_retries": runtime.context.max_grounding_retries,
-        "steps": [_step("input_guard", started, "pass (governance checks come on Day 5)")],
+        "steps": [_step("input_guard", started, "pass")],
         "llm_requests": 0,
     }
 
@@ -206,7 +206,7 @@ async def output_guard(state: AgentState, runtime: Runtime[AgentContext]) -> Age
         # A grounded draft that covers only part of the question is a partial answer.
         "outcome": "answered" if state["draft"].answerable else "partial",
         "guard_decisions": decisions,
-        "steps": [_step("output_guard", started, "pass (governance checks come on Day 5)")],
+        "steps": [_step("output_guard", started, "pass")],
     }
 
 

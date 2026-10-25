@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.conversations.repository import ConversationRepository
 from app.conversations.schemas import MessageOut
 from app.core.db import get_session
+from app.core.security import require_api_key
 
-router = APIRouter(prefix="/conversations", tags=["conversations"])
+router = APIRouter(
+    prefix="/conversations", tags=["conversations"], dependencies=[Depends(require_api_key)]
+)
 
 
 def get_conversation_repository(

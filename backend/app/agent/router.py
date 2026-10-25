@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends
 from app.agent.dependencies import get_agent_service
 from app.agent.schemas import AgentAskResponse
 from app.agent.service import AgentService
+from app.core.security import require_api_key
 from app.rag.schemas import AskRequest
 
-router = APIRouter(tags=["agent"])
+router = APIRouter(tags=["agent"], dependencies=[Depends(require_api_key)])
 
 
 @router.post("/agent/ask", response_model=AgentAskResponse, response_model_exclude_none=True)
