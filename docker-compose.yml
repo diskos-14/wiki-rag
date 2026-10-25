@@ -18,5 +18,28 @@ services:
       retries: 10
     restart: unless-stopped
 
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Inside the compose network the database host is "db", not localhost.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Your local gcloud login (gcloud auth application-default login), mounted read-only.
+      # On Cloud Run the service account is used instead and no file is needed.
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+    volumes:
+      - ${GCP_ADC_FILE:?set GCP_ADC_FILE in .env to your application_default_credentials.json}:/gcp/adc.json:ro
+    ports:
+      - "${BACKEND_PORT:-8000}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+    restart: unless-stopped
+
 volumes:
   pgdata:

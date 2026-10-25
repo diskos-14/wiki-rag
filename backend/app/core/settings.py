@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Google Cloud / Vertex AI (auth via Application Default Credentials, no API key)
     gcp_project: str | None = None
-    gcp_location: str = "asia-southeast1"
+    gcp_location: str = "global"
     gcp_max_retries: int = 8  # SDK retries 408/429/5xx with exponential backoff
 
     # Embeddings

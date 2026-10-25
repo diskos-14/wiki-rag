@@ -1,0 +1,17 @@
+# Local environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets never go into the image (Cloud Run injects them from Secret Manager)
+.env
+.env.*
+
+# Not needed at runtime: tests, and local data (the dataset is downloaded by the ingest job;
+# titles and profiles come from seed/, which IS included)
+tests/
+data/
